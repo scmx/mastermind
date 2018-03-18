@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Mastermind</title>
+    <meta charset="utf-8" />
+
+    <style>
+      html {
+        box-sizing: border-box;
+        font-size: 2em;
+      }
+      *, *::before, *::after {
+        box-sizing: inherit;
+      }
+      body {
+        margin: 0;
+        background: lightgreen;
+      }
+      .hidden {
+        display: none;
+      }
+      .state {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        min-height: 1vh;
+        background: white;
+      }
+      .row {
+        display: flex;
+        margin: 0.3rem;
+      }
+      .row__guess, .row__result {
+        display: flex;
+        padding: 0.3rem 0;
+      }
+      .guess {
+        position: relative;
+        width: 1.4rem;
+        height: 1.4rem;
+        margin: 0 0.3rem;
+        border-radius: 50%;
+        border: 0.2rem solid lightgreen;
+        background: transparent;
+        box-shadow: inset -0.2rem -0.2rem 0.5rem rgba(0, 0, 0, 0.1);
+      }
+      .guess:focus {
+        outline: none;
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+      .guess--current,
+      .guess--current:focus {
+        border-color: rgba(255, 255, 255, 0.3);
+      }
+      .guess::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1rem;
+        height: 1rem;
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 50%;
+        border: 0.2rem solid transparent;
+      }
+      .guess--red {
+        background: red;
+      }
+      .guess--green {
+        background: green;
+      }
+      .guess--blue {
+        background: blue;
+      }
+      .guess--yellow {
+        background: yellow;
+      }
+      .guess--black {
+        background: black;
+      }
+      .guess--white {
+        background: white;
+      }
+      .guess--orange {
+        background: orange;
+      }
+      .guess--brown {
+        background: brown;
+      }
+      .result {
+        width: 0.5rem;
+        height: 0.5rem;
+        margin: 0.55rem 0.2rem;
+        border-radius: 50%;
+      }
+      .result::before {
+        content: '';
+        position: absolute;
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.1);
+      }
+      .result:first-of-type {
+        margin-left: 0.6rem;
+      }
+      .result--white {
+        background: white;
+      }
+      .result--black {
+        background: black;
+      }
+      .buttons {
+        margin: 0.5rem;
+      }
+      .button {
+        width: 1rem;
+        height: 1rem;
+        margin: 0.2rem;
+        border-radius: 50%;
+        border: 0;
+      }
+      .button--red {
+        background: red;
+      }
+      .button--green {
+        background: green;
+      }
+      .button--blue {
+        background: blue;
+      }
+      .button--yellow {
+        background: yellow;
+      }
+      .button--black {
+        background: black;
+      }
+      .button--white {
+        background: white;
+      }
+      .button--orange {
+        background: orange;
+      }
+      .button--brown {
+        background: brown;
+      }
+    </style>
+
+    <script src="hyperapp-v1.1.2.js"></script>
+
+    <script>
+      // Hold down s to see current state
+      window.addEventListener('keydown', event => {
+        if (event.code !== 'KeyS') { return }
+
+        document.querySelector('.state').classList.remove('hidden')
+      })
+
+      window.addEventListener('keyup', event => {
+        if (event.code !== 'KeyS') { return }
+
+        document.querySelector('.state').classList.add('hidden')
+      })
+
+      const { h, app } = hyperapp
+
+      const colors = [
+        'red', 'green', 'blue', 'yellow',
+        'black', 'white', 'orange', 'brown'
+      ]
+
+      function classnames (manifest) {
+        const classes = []
+
+        Object.keys(manifest).forEach(klass => {
+          if (manifest[klass]) {
+            classes.push(klass)
+          }
+        })
+
+        return classes.join(' ')
+      }
+
+      function randomColor () {
+        return colors[Math.floor(Math.random() * colors.length)]
+      }
+
+      function emptyRows (maxRow, codeSize) {
+        const rows = {}
+
+        for (let i = 1; i <= maxRow; i++) {
+          rows[i] = Array(codeSize).fill()
+        }
+
+        return rows
+      }
+
+      const codeSize = 5
+      const maxRow = 12
+
+      const state = {
+        code: Array(codeSize).fill().map(randomColor),
+        row: 1,
+        position: 0,
+        maxRow,
+        guesses: emptyRows(maxRow, codeSize),
+        results: emptyRows(maxRow, codeSize),
+        colors: colors,
+        gameover: false
+      }
+
+      const actions = {
+        choosePosition: position => state => {
+          if (position < 0) {
+            console.error('Position has to be greater or equal to 0')
+            return
+          }
+
+          if (position >= state.code.length) {
+            console.error(`Position has to be less than ${state.code.length}`)
+            return
+          }
+
+          return { position }
+        },
+        guess: ({ position, color }) => state => {
+          if (state.gameover) {
+            console.error('Already game over')
+            return
+          }
+          if (state.row > state.maxRow) {
+            throw new Error('Should never happen! (Famous last words)')
+          }
+
+          if (position < 0) {
+            console.error('Position has to be greater or equal to 0')
+            return
+          }
+
+          if (position >= state.code.length) {
+            console.error(`Position has to be less than ${state.code.length}`)
+            return
+          }
+
+          if (state.colors.indexOf(color) === -1) {
+            console.error(`Color has to be one of ${state.colors.join(', ')}`)
+            return
+          }
+
+          const guess = [
+            ...state.guesses[state.row].slice(0, position),
+            color,
+            ...state.guesses[state.row].slice(position + 1),
+          ]
+
+          const guesses = Object.assign({}, state.guesses, {
+            [state.row]: guess
+          })
+
+          // Continue guessing
+          if (!guess.every(val => val)) {
+            return {
+              guesses,
+              position: (state.position + 1) % state.code.length
+            }
+          }
+
+          // Respond to guesses
+          const whitePegs = {}
+
+          const blackPegs = state.colors.reduce((acc, color) => (
+            Object.assign({}, acc, {
+              [color]: 0
+            })
+          ), {})
+
+          guess.forEach((color, index) => {
+            // Correct
+            if (state.code[index] === color) {
+              blackPegs[color] += 1
+            }
+          })
+
+          const result = guess.map((color, index) => {
+            // Correct
+            if (state.code[index] == color) {
+              return 'black'
+            }
+
+            // No such color in code
+            if (state.code.indexOf(color) === -1) {
+              return null
+            }
+
+            whitePegs[color] = whitePegs[color] || 0
+
+            // Correct color but wrong position
+            const countInCode = state.code.filter(c => c === color).length
+            if (blackPegs[color] + whitePegs[color] > countInCode) {
+              throw new Error('Should never happen! (Famous last words)')
+            }
+
+            // No more matches left of this color
+            if (blackPegs[color] + whitePegs[color] === countInCode) {
+              return null
+            }
+
+            // Add a white peg
+            whitePegs[color] += 1
+            return 'white'
+          })
+
+          const results = Object.assign({}, state.results, {
+            [state.row]: result
+          })
+
+          if (result.every(color => color === 'black')) {
+            return {
+              guesses,
+              results,
+              position: null,
+              gameover: 'You win!'
+            }
+          }
+
+          // Onward to next row
+          if (state.row < state.maxRow) {
+            return {
+              guesses,
+              results,
+              row: state.row + 1,
+              position: 0
+            }
+          }
+
+          // Game over
+          return {
+            gameover: 'You lose!'
+          }
+        }
+      }
+
+      const view = (state, actions) => (
+        h('div', {}, [
+          h('div', { 'class': 'rows' }, [
+            Object.keys(state.guesses).slice(0, state.row).map(
+              Number
+            ).map(row => (
+              h('div', {
+                key: row,
+                'class': 'row'
+              }, row === state.row ? [
+                h('div', {
+                  'class': 'row__guess'
+                }, [
+                  state.guesses[row].map((guess, index) => (
+                    h('button', {
+                      key: index,
+                      'type': 'button',
+                      'class': classnames({
+                        guess: true,
+                        [`guess--${guess}`]: guess,
+                        [`guess--current`]: index === state.position
+                      }),
+                      onclick () { actions.choosePosition(index) }
+                    })
+                  ))
+                ]),
+                h('div', {
+                  'class': 'row__result'
+                }, [
+                  state.results[row].map((result, index) => (
+                    h('div', {
+                      key: index,
+                      'class': `result ${result ? `result--${result}` : ''}`
+                    })
+                  ))
+                ])
+              ] : [
+                h('div', {
+                  'class': 'row__guess'
+                }, [
+                  state.guesses[row].map((guess, index) => (
+                    h('div', {
+                      key: index,
+                      'class': `guess ${guess ? `guess--${guess}` : ''}`
+                    })
+                  ))
+                ]),
+                h('div', {
+                  'class': 'row__result'
+                }, [
+                  state.results[row].map((result, index) => (
+                    h('div', {
+                      key: index,
+                      'class': `result ${result ? `result--${result}` : ''}`
+                    })
+                  ))
+                ])
+              ])
+            ))
+          ]),
+          state.gameover ? (
+            h('div', {}, state.gameover)
+          ) : null,
+          h('pre', {
+            'class': 'state hidden'
+          }, [
+            h('code', {}, [
+              JSON.stringify(state, null, 2)
+            ])
+          ]),
+          h('div', {
+            'class': 'buttons'
+          }, [
+            state.colors.map(color => (
+              h('button', {
+                key: color,
+                'type': 'button',
+                'class': `button button--${color}`,
+                onclick () { actions.guess({ position: state.position, color }) }
+              })
+            ))
+          ])
+        ])
+      )
+
+      document.addEventListener('DOMContentLoaded', () => {
+        app(state, actions, view, document.body)
+      })
+    </script>
+  </head>
+
+  <body></body>
+</html>
